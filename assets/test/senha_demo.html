@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BeePainel — Demo de Senha</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 24px;
+      font-family: system-ui, sans-serif; background: #11151c; color: #f5d142;
+      text-align: center;
+    }
+    h1 { font-size: 12vw; margin: 0; }
+    .guiche { color: #fff; font-size: 4vw; }
+    .row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+    button {
+      font-size: 24px; padding: 16px 28px; border-radius: 12px; border: 0;
+      background: #f5d142; color: #11151c; cursor: pointer; font-weight: 700;
+    }
+    button:focus { outline: 4px solid #fff; }
+    #log { color: #8aa; font-size: 14px; max-width: 90vw; white-space: pre-wrap; }
+    #store { color: #6c8; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="guiche">Senha</div>
+    <h1 id="senha">--</h1>
+    <div class="guiche" id="guiche">Guichê --</div>
+  </div>
+  <div class="row">
+    <button id="call">Chamar próxima senha</button>
+    <button id="repeat">Repetir narração</button>
+    <button id="testStore">Testar localStorage</button>
+  </div>
+  <div id="store"></div>
+  <div id="log"></div>
+
+  <script>
+    var n = parseInt(localStorage.getItem('ultimaSenha') || '40', 10);
+    var logEl = document.getElementById('log');
+    var storeEl = document.getElementById('store');
+
+    function log(m) {
+      logEl.textContent = (new Date().toLocaleTimeString() + '  ' + m + '\n' + logEl.textContent).slice(0, 1200);
+    }
+
+    function refreshStore() {
+      storeEl.textContent = 'localStorage.ultimaSenha = ' + (localStorage.getItem('ultimaSenha') || '(vazio)');
+    }
+
+    function narrar(texto) {
+      log('speechSynthesis disponível: ' + ('speechSynthesis' in window));
+      var u = new SpeechSynthesisUtterance(texto);
+      u.lang = 'pt-BR';
+      u.rate = 1.0;
+      u.onstart = function () { log('onstart: ' + texto); };
+      u.onend = function () { log('onend'); };
+      u.onerror = function (e) { log('onerror: ' + (e && e.error)); };
+      speechSynthesis.speak(u);
+    }
+
+    var lastText = '';
+    document.getElementById('call').onclick = function () {
+      n += 1;
+      var guiche = 1 + (n % 4);
+      localStorage.setItem('ultimaSenha', String(n));
+      document.getElementById('senha').textContent = String(n).padStart(3, '0');
+      document.getElementById('guiche').textContent = 'Guichê ' + guiche;
+      lastText = 'Senha ' + String(n).padStart(3, '0') + ', guichê ' + guiche;
+      refreshStore();
+      narrar(lastText);
+    };
+
+    document.getElementById('repeat').onclick = function () {
+      if (lastText) narrar(lastText);
+    };
+
+    document.getElementById('testStore').onclick = function () {
+      var v = 'gravado-' + Date.now();
+      localStorage.setItem('beePainelTeste', v);
+      log('Gravado beePainelTeste=' + v + ' | lido=' + localStorage.getItem('beePainelTeste'));
+    };
+
+    refreshStore();
+    document.getElementById('senha').textContent = String(n).padStart(3, '0');
+  </script>
+</body>
+</html>
