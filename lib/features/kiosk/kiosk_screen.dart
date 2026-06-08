@@ -4,7 +4,13 @@ import 'dart:collection';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
-    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey, rootBundle;
+    show
+        HardwareKeyboard,
+        KeyDownEvent,
+        KeyEvent,
+        KeyUpEvent,
+        LogicalKeyboardKey,
+        rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -63,9 +69,15 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   // controle remoto na Android TV). Cada incremento dispara o listener.
   final ValueNotifier<int> _openControls = ValueNotifier<int>(0);
 
-  // Foco do WebView: precisa receber as setas do D-pad para a pagina tratar a
-  // navegacao (em TV/controle remoto).
-  final FocusNode _webFocus = FocusNode(debugLabel: 'webview');
+  // Foco raiz do kiosque: mantem o Flutter recebendo as setas do controle
+  // (para mover o cursor) em vez de o WebView nativo captura-las.
+  final FocusNode _rootFocus = FocusNode(debugLabel: 'kiosk-root');
+
+  // --- Cursor virtual controlado pelo D-pad (TV sem tela de toque) ---
+  // Posicao do cursor RELATIVA a area do WebView (logical px ~ CSS px).
+  Offset? _cursorPos;
+  bool _cursorVisible = false;
+  Size _webArea = Size.zero;
 
   @override
   void initState() {
@@ -108,7 +120,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     _loadWatchdog?.cancel();
     _connSub?.cancel();
     _openControls.dispose();
-    _webFocus.dispose();
+    _rootFocus.dispose();
     _kioskMode?.exit();
     super.dispose();
   }
@@ -169,14 +181,48 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     }
   }
 
-  /// Atalhos de teclado/controle remoto para sair do kiosque sem toque
-  /// (essencial no Android TV, onde nao ha tela sensivel ao toque):
-  /// - Tecla MENU do controle remoto -> abre Configuracoes (passa por PIN).
-  /// - Ctrl+Shift+Q (teclado/desktop) -> encerra o app (passa por PIN).
+  /// Tratamento das teclas do controle remoto / teclado no kiosque:
+  /// - Setas: movem o cursor virtual sobre a pagina (TV sem tela de toque).
+  /// - OK/Enter: clica no ponto do cursor (despachado via JS na pagina).
+  /// - MENU: abre Configuracoes (passa por PIN). Ctrl+Shift+Q: encerra.
+  ///
+  /// Movimento do cursor so age quando o foco raiz esta ativo (WebView). Quando
+  /// o menu de controles esta aberto, as setas navegam entre os botoes.
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final cursorActive = _rootFocus.hasPrimaryFocus;
+
+    if (cursorActive) {
+      const step = 45.0;
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        _moveCursor(-step, 0);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowRight) {
+        _moveCursor(step, 0);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowUp) {
+        _moveCursor(0, -step);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        _moveCursor(0, step);
+        return KeyEventResult.handled;
+      }
+      if (_cursorVisible &&
+          (key == LogicalKeyboardKey.select ||
+              key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter ||
+              key == LogicalKeyboardKey.gameButtonA)) {
+        _clickAtCursor();
+        return KeyEventResult.handled;
+      }
+    }
+
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    final key = event.logicalKey;
     if (key == LogicalKeyboardKey.contextMenu) {
       _goSettings();
       return KeyEventResult.handled;
@@ -194,29 +240,54 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     return KeyEventResult.ignored;
   }
 
-  // Teclas do WebView: por padrao o Flutter "engole" as setas (focus traversal)
-  // e elas nunca chegam a pagina (flutter/flutter#102505). Aqui pedimos para o
-  // Flutter parar de processa-las, deixando o WebView (com foco nativo) tratar
-  // a navegacao por D-pad. So vale enquanto o WebView esta focado.
-  static final Set<LogicalKeyboardKey> _webNavKeys = {
-    LogicalKeyboardKey.arrowLeft,
-    LogicalKeyboardKey.arrowRight,
-    LogicalKeyboardKey.arrowUp,
-    LogicalKeyboardKey.arrowDown,
-    LogicalKeyboardKey.select,
-    LogicalKeyboardKey.enter,
-    LogicalKeyboardKey.gameButtonA,
-  };
-
-  KeyEventResult _handleWebViewKey(FocusNode node, KeyEvent event) {
-    if (_webNavKeys.contains(event.logicalKey)) {
-      return KeyEventResult.skipRemainingHandlers;
-    }
-    return KeyEventResult.ignored;
+  void _focusWebView() {
+    if (mounted) _rootFocus.requestFocus();
   }
 
-  void _focusWebView() {
-    if (mounted) _webFocus.requestFocus();
+  void _moveCursor(double dx, double dy) {
+    if (_webArea.isEmpty) return;
+    setState(() {
+      _cursorVisible = true;
+      final cur = _cursorPos ??
+          Offset(_webArea.width / 2, _webArea.height / 2);
+      _cursorPos = Offset(
+        (cur.dx + dx).clamp(0.0, _webArea.width),
+        (cur.dy + dy).clamp(0.0, _webArea.height),
+      );
+    });
+  }
+
+  /// Despacha um clique sintetico no ponto do cursor, direto na pagina. Usa a
+  /// FRACAO da posicao (0..1) e multiplica por window.innerWidth/Height, para
+  /// funcionar independente de escala/viewport. elementFromPoint + sequencia de
+  /// eventos de mouse cobre tambem SPAs (React etc.).
+  Future<void> _clickAtCursor() async {
+    final pos = _cursorPos;
+    final controller = _controller;
+    if (pos == null || controller == null || _webArea.isEmpty) return;
+    final fracX = (pos.dx / _webArea.width).clamp(0.0, 1.0);
+    final fracY = (pos.dy / _webArea.height).clamp(0.0, 1.0);
+    try {
+      await controller.evaluateJavascript(source: '''
+        (function(){
+          var w = window.innerWidth || document.documentElement.clientWidth;
+          var h = window.innerHeight || document.documentElement.clientHeight;
+          var x = Math.round($fracX * w);
+          var y = Math.round($fracY * h);
+          var el = document.elementFromPoint(x, y);
+          if(!el){return;}
+          var opts = {bubbles:true, cancelable:true, clientX:x, clientY:y, view:window};
+          ['pointerover','mouseover','pointerdown','mousedown','pointerup','mouseup','click']
+            .forEach(function(t){
+              var ev;
+              try{ ev = new MouseEvent(t, opts); }
+              catch(e){ ev = document.createEvent('MouseEvents'); ev.initEvent(t, true, true); }
+              el.dispatchEvent(ev);
+            });
+          if(typeof el.focus === 'function'){ try{ el.focus(); }catch(e){} }
+        })();
+      ''');
+    } catch (_) {}
   }
 
   Future<bool> _passPin() async {
@@ -288,8 +359,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       domStorageEnabled: true,
       databaseEnabled: true,
       useHybridComposition: true,
-      // Da foco inicial ao conteudo web (necessario p/ D-pad na Android TV).
-      needInitialFocus: true,
+      // NAO deixa o WebView capturar o foco nativo: o Flutter precisa receber
+      // as setas do controle para mover o cursor virtual.
+      needInitialFocus: false,
     );
   }
 
@@ -374,7 +446,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           });
         }
         _clearLoading();
-        // Devolve o foco ao WebView para o D-pad navegar dentro da pagina.
+        // Garante o foco raiz (Flutter) para o cursor responder ao controle.
         _focusWebView();
       },
       onReceivedError: (controller, request, error) {
@@ -427,24 +499,20 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         if (!didPop) _openControls.value++;
       },
       child: Focus(
-        // Atalhos de teclado/controle (MENU / Ctrl+Shift+Q). NAO recebe o foco
-        // inicial para nao roubar do WebView, que precisa do foco nativo p/ o
-        // D-pad. Eventos sobem ate aqui vindos do WebView/controles.
+        // Foco raiz do kiosque: mantem o Flutter recebendo as setas (para mover
+        // o cursor virtual) e trata atalhos (MENU / Ctrl+Shift+Q).
+        focusNode: _rootFocus,
+        autofocus: true,
         onKeyEvent: _handleKey,
         child: Scaffold(
         backgroundColor: Colors.black,
         body: Padding(
           padding: overscan,
-          child: Stack(
+          child: LayoutBuilder(builder: (context, constraints) {
+            _webArea = Size(constraints.maxWidth, constraints.maxHeight);
+            return Stack(
           children: [
-            Positioned.fill(
-              child: Focus(
-                focusNode: _webFocus,
-                autofocus: true,
-                onKeyEvent: _handleWebViewKey,
-                child: webView,
-              ),
-            ),
+            Positioned.fill(child: webView),
             if (_loading && !_error)
               const Positioned.fill(
                 child: ColoredBox(
@@ -459,6 +527,14 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                   retryInSeconds: _retryCountdown,
                   onRetryNow: _reloadNow,
                 ),
+              ),
+            // Cursor virtual controlado pelo D-pad (so aparece apos uso do
+            // controle; em telas de toque permanece oculto).
+            if (_cursorVisible && _cursorPos != null)
+              Positioned(
+                left: _cursorPos!.dx,
+                top: _cursorPos!.dy,
+                child: const IgnorePointer(child: _VirtualCursor()),
               ),
             // Área invisível extra (canto superior esquerdo): 5 toques em 3s.
             Positioned(
@@ -482,10 +558,31 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
               onClosed: _focusWebView,
             ),
           ],
-          ),
+            );
+          }),
         ),
       ),
       ),
+    );
+  }
+}
+
+/// Cursor virtual (ponteiro) desenhado sobre o WebView, posicionado de forma
+/// que a "ponta" coincida com o ponto de clique. Tem contorno escuro para
+/// ficar visivel sobre qualquer fundo.
+class _VirtualCursor extends StatelessWidget {
+  const _VirtualCursor();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Icon(
+      Icons.near_me,
+      color: Colors.white,
+      size: 30,
+      shadows: [
+        Shadow(color: Colors.black, blurRadius: 3, offset: Offset(1, 1)),
+        Shadow(color: Colors.black, blurRadius: 1, offset: Offset(-1, -1)),
+      ],
     );
   }
 }
