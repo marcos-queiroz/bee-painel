@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'application/providers.dart';
 import 'services/kiosk/kiosk_mode_service.dart';
+import 'services/platform/platform_info.dart';
 import 'services/webview/webview_environment.dart';
 
 Future<void> main() async {
@@ -14,11 +15,13 @@ Future<void> main() async {
   await initWebViewEnvironment();
 
   final prefs = await SharedPreferences.getInstance();
+  final isAndroidTv = await PlatformInfo.isAndroidTv();
 
   runApp(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        isAndroidTvProvider.overrideWithValue(isAndroidTv),
       ],
       child: const _Initializer(child: BeePainelApp()),
     ),

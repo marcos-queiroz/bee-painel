@@ -17,6 +17,9 @@ final sharedPreferencesProvider = Provider<SharedPreferences>(
   (ref) => throw UnimplementedError('sharedPreferencesProvider não inicializado'),
 );
 
+/// `true` em Android TV. Sobrescrito no bootstrap (main).
+final isAndroidTvProvider = Provider<bool>((ref) => false);
+
 final prefsSourceProvider = Provider<PrefsSource>(
   (ref) => PrefsSource(ref.watch(sharedPreferencesProvider)),
 );
