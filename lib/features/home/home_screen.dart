@@ -107,7 +107,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 24),
                   TextField(
                     controller: _controller,
-                    autofocus: true,
                     keyboardType: TextInputType.url,
                     textInputAction: TextInputAction.go,
                     style: const TextStyle(fontSize: 20),
@@ -158,15 +157,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    ...config.recents.map(
-                      (r) => _RecentTile(
-                        url: r.url,
-                        onTap: () => _open(r.url),
-                        onRemove: () => ref
-                            .read(kioskConfigProvider.notifier)
-                            .removeRecent(r.url),
-                      ),
-                    ),
+                    ...config.recents.asMap().entries.map(
+                          (e) => _RecentTile(
+                            url: e.value.url,
+                            // Foco inicial no 1o item: na Android TV o D-pad
+                            // precisa de um alvo focado (o TextField nao recebe
+                            // mais autofocus, pois prendia a navegacao).
+                            autofocus: e.key == 0,
+                            onTap: () => _open(e.value.url),
+                            onRemove: () => ref
+                                .read(kioskConfigProvider.notifier)
+                                .removeRecent(e.value.url),
+                          ),
+                        ),
                   ],
                 ],
               ),
@@ -186,11 +189,13 @@ class _RecentTile extends StatefulWidget {
     required this.url,
     required this.onTap,
     required this.onRemove,
+    this.autofocus = false,
   });
 
   final String url;
   final VoidCallback onTap;
   final VoidCallback onRemove;
+  final bool autofocus;
 
   @override
   State<_RecentTile> createState() => _RecentTileState();
@@ -211,6 +216,7 @@ class _RecentTileState extends State<_RecentTile> {
         ),
       ),
       child: ListTile(
+        autofocus: widget.autofocus,
         onFocusChange: (f) => setState(() => _focused = f),
         leading: const Icon(Icons.history),
         title:
