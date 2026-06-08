@@ -13,15 +13,45 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   final _controller = TextEditingController();
+  final _urlFocus = FocusNode();
+  final _openFocus = FocusNode();
   bool _pin = false;
   String? _error;
+  double _lastBottomInset = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
+    _urlFocus.dispose();
+    _openFocus.dispose();
     super.dispose();
+  }
+
+  // Ao fechar o teclado virtual na Android TV, o foco do D-pad costuma ficar
+  // "perdido" (app parece travado). Detectamos o fechamento do IME e devolvemos
+  // o foco para um alvo navegavel (botao Abrir).
+  @override
+  void didChangeMetrics() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final bottom = MediaQuery.of(context).viewInsets.bottom;
+      final keyboardClosed = _lastBottomInset > 0 && bottom == 0;
+      _lastBottomInset = bottom;
+      if (keyboardClosed) {
+        _urlFocus.unfocus();
+        _openFocus.requestFocus();
+      }
+    });
   }
 
   Future<void> _open(String raw) async {
@@ -107,6 +137,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 24),
                   TextField(
                     controller: _controller,
+                    focusNode: _urlFocus,
                     keyboardType: TextInputType.url,
                     textInputAction: TextInputAction.go,
                     style: const TextStyle(fontSize: 20),
@@ -131,6 +162,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
+                    focusNode: _openFocus,
                     onPressed: () => _open(_controller.text),
                     icon: const Icon(Icons.play_arrow_rounded, size: 28),
                     label: const Text('Abrir'),
