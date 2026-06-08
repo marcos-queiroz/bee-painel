@@ -43,6 +43,14 @@ class KioskConfigNotifier extends Notifier<KioskConfig> {
     state = await _repo.addRecent(state, url);
   }
 
+  Future<void> removeRecent(String url) async {
+    state = await _repo.removeRecent(state, url);
+  }
+
+  Future<void> clearRecents() async {
+    state = await _repo.clearRecents(state);
+  }
+
   Future<void> pin(String url) async {
     state = await _repo.pin(state, url);
   }

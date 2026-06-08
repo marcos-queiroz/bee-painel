@@ -27,6 +27,17 @@ class KioskSettingsRepository {
     return save(config.copyWith(recents: updated));
   }
 
+  /// Remove uma URL específica da lista de recentes.
+  Future<KioskConfig> removeRecent(KioskConfig config, String url) async {
+    final updated = config.recents.where((r) => r.url != url).toList();
+    return save(config.copyWith(recents: updated));
+  }
+
+  /// Limpa toda a lista de recentes.
+  Future<KioskConfig> clearRecents(KioskConfig config) async {
+    return save(config.copyWith(recents: const []));
+  }
+
   Future<KioskConfig> pin(KioskConfig config, String url) {
     return save(config.copyWith(pinnedUrl: url, autoStart: true));
   }

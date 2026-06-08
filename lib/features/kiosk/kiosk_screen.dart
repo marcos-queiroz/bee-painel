@@ -3,7 +3,8 @@ import 'dart:collection';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey, rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,6 +34,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   KioskModeService? _kioskMode;
   String? _polyfill;
   String? _initialOrigin;
+  String? _currentUrl;
 
   // Widget do WebView memoizado: criado UMA vez para evitar que rebuilds
   // (setState de loading/erro/conectividade) recriem a plataforma e recarreguem
@@ -55,6 +57,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   void initState() {
     super.initState();
     _initialOrigin = widget.isDemo ? null : UrlUtils.origin(widget.url);
+    _currentUrl = widget.isDemo ? null : widget.url;
     _kioskMode = ref.read(kioskModeServiceProvider);
     _bootstrap();
   }
@@ -150,6 +153,31 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     }
   }
 
+  /// Atalhos de teclado/controle remoto para sair do kiosque sem toque
+  /// (essencial no Android TV, onde nao ha tela sensivel ao toque):
+  /// - Tecla MENU do controle remoto -> abre Configuracoes (passa por PIN).
+  /// - Ctrl+Shift+Q (teclado/desktop) -> encerra o app (passa por PIN).
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.contextMenu) {
+      _goSettings();
+      return KeyEventResult.handled;
+    }
+
+    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    final ctrl = keys.contains(LogicalKeyboardKey.controlLeft) ||
+        keys.contains(LogicalKeyboardKey.controlRight);
+    final shift = keys.contains(LogicalKeyboardKey.shiftLeft) ||
+        keys.contains(LogicalKeyboardKey.shiftRight);
+    if (ctrl && shift && key == LogicalKeyboardKey.keyQ) {
+      _quitApp();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   Future<bool> _passPin() async {
     final config = ref.read(kioskConfigProvider);
     return PinDialog.show(context, config.exitPinHash);
@@ -168,6 +196,38 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   Future<void> _quitApp() async {
     if (!await _passPin() || !mounted) return;
     await _kioskMode?.quitApp();
+  }
+
+  /// Fixa a URL atualmente exibida (já com eventuais redirecionamentos
+  /// aplicados) ou desafixa, caso ela já esteja fixada.
+  Future<void> _togglePin() async {
+    final notifier = ref.read(kioskConfigProvider.notifier);
+    final config = ref.read(kioskConfigProvider);
+
+    // Prefere a URL viva do WebView; cai para a última conhecida.
+    final live = (await _controller?.getUrl())?.toString();
+    final url = (live != null && live.isNotEmpty) ? live : _currentUrl;
+    if (url == null || url.isEmpty) return;
+
+    final alreadyPinned = config.autoStart && config.pinnedUrl == url;
+    if (alreadyPinned) {
+      await notifier.unpin();
+    } else {
+      await notifier.pin(url);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 3),
+          content: Text(
+            alreadyPinned
+                ? 'URL desafixada. O app voltará a abrir na tela inicial.'
+                : 'URL fixada: $url',
+          ),
+        ),
+      );
   }
 
   // --- WebView config ---
@@ -260,6 +320,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           setState(() {
             _error = false;
             _retryAttempt = 0;
+            if (url != null) _currentUrl = url.toString();
           });
         }
         _clearLoading();
@@ -290,9 +351,17 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
     final webView = _webView ??= _buildWebView();
 
+    final config = ref.watch(kioskConfigProvider);
+    final isPinned = config.autoStart &&
+        config.pinnedUrl != null &&
+        config.pinnedUrl == _currentUrl;
+
     return PopScope(
       canPop: false,
-      child: Scaffold(
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: _handleKey,
+        child: Scaffold(
         body: Stack(
           children: [
             Positioned.fill(child: webView),
@@ -327,9 +396,12 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
               onSettings: _goSettings,
               onHome: _goHome,
               onQuit: _quitApp,
+              onTogglePin: widget.isDemo ? null : _togglePin,
+              isPinned: isPinned,
             ),
           ],
         ),
+      ),
       ),
     );
   }

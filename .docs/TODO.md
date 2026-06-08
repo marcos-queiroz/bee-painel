@@ -74,13 +74,14 @@ problema central da narração (RF-07).
 - [ ] Documentar requisito do WebView2 Runtime para distribuição
 
 ## Fase 7 — Android TV ([SDD-005 §2](./SDD-005-plataformas-e-build.md))
-- [ ] Manifesto: `LEANBACK_LAUNCHER`, `leanback` required, touchscreen não-required
-- [ ] Banner de TV `@drawable/tv_banner` (320x180)
-- [ ] Impl `KioskModeService` Android (`immersiveSticky`, interceptar Voltar)
-- [ ] Navegação D-pad na Home (`FocusTraversalGroup`, `Shortcuts/Actions`)
+- [x] Manifesto: `LEANBACK_LAUNCHER`, `leanback`/touchscreen `required=false` (TV + celular), permissões `INTERNET`/`ACCESS_NETWORK_STATE`
+- [x] Banner de TV `@drawable/tv_banner` (320x180)
+- [x] Impl `KioskModeService` Android (`immersiveSticky`, interceptar Voltar via `PopScope canPop:false`)
+- [x] Navegação D-pad na Home (`FocusTraversalGroup` + realce de foco nos recentes)
+- [x] Saída sem toque no kiosque: tecla MENU do controle → Configurações, `Ctrl+Shift+Q` → fechar, `KioskControls` focável/auto-expansível por D-pad
 - [ ] **Validar narração no Android TV físico** (motor TTS instalado) — RF-07
 - [ ] Validar persistência de localStorage no WebView da TV
-- [ ] `flutter build apk --release` + sideload via ADB
+- [ ] `flutter build apk --release` + sideload via ADB (executar com o SDK do Flutter no PATH)
 
 ## Fase 8 — Hardening e distribuição (opcional/futuro)
 - [ ] Windows: documentar Assigned Access (kiosk de SO)

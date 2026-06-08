@@ -41,6 +41,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     context.go('/kiosk?url=${Uri.encodeComponent('asset://demo')}');
   }
 
+  Future<void> _clearRecents() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Limpar recentes'),
+        content: const Text(
+            'Deseja apagar todas as URLs recentes? Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Limpar tudo'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(kioskConfigProvider.notifier).clearRecents();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final config = ref.watch(kioskConfigProvider);
@@ -52,7 +76,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             constraints: const BoxConstraints(maxWidth: 720),
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32),
-              child: Column(
+              child: FocusTraversalGroup(
+                child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -119,30 +144,89 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   if (config.recents.isNotEmpty) ...[
                     const SizedBox(height: 28),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Recentes',
-                          style: Theme.of(context).textTheme.titleLarge),
+                    Row(
+                      children: [
+                        Text('Recentes',
+                            style: Theme.of(context).textTheme.titleLarge),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: _clearRecents,
+                          icon: const Icon(Icons.delete_sweep_outlined,
+                              size: 20),
+                          label: const Text('Limpar tudo'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     ...config.recents.map(
-                      (r) => Card(
-                        color: AppTheme.surface,
-                        child: ListTile(
-                          leading: const Icon(Icons.history),
-                          title: Text(r.url,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(r.url),
-                        ),
+                      (r) => _RecentTile(
+                        url: r.url,
+                        onTap: () => _open(r.url),
+                        onRemove: () => ref
+                            .read(kioskConfigProvider.notifier)
+                            .removeRecent(r.url),
                       ),
                     ),
                   ],
                 ],
               ),
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Item de URL recente com realce de foco visível para navegação por D-pad
+/// (controle remoto de Android TV).
+class _RecentTile extends StatefulWidget {
+  const _RecentTile({
+    required this.url,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  final String url;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  @override
+  State<_RecentTile> createState() => _RecentTileState();
+}
+
+class _RecentTileState extends State<_RecentTile> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: _focused ? AppTheme.honey : Colors.transparent,
+          width: 2,
+        ),
+      ),
+      child: ListTile(
+        onFocusChange: (f) => setState(() => _focused = f),
+        leading: const Icon(Icons.history),
+        title:
+            Text(widget.url, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Remover',
+              icon: const Icon(Icons.close),
+              onPressed: widget.onRemove,
+            ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+        onTap: widget.onTap,
       ),
     );
   }
