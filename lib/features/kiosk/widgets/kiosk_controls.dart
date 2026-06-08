@@ -11,6 +11,7 @@ class KioskControls extends StatefulWidget {
     this.onTogglePin,
     this.isPinned = false,
     this.openSignal,
+    this.onClosed,
   });
 
   final VoidCallback onSettings;
@@ -27,6 +28,9 @@ class KioskControls extends StatefulWidget {
   /// tecla VOLTAR do controle remoto (Android TV), já que o WebView captura o
   /// D-pad e impede alcançar o menu pelo foco normal.
   final Listenable? openSignal;
+
+  /// Chamado quando o menu é recolhido, para o pai devolver o foco ao WebView.
+  final VoidCallback? onClosed;
 
   @override
   State<KioskControls> createState() => _KioskControlsState();
@@ -65,6 +69,11 @@ class _KioskControlsState extends State<KioskControls> {
     _menuFocus.requestFocus();
   }
 
+  void _toggleExpanded() {
+    setState(() => _expanded = !_expanded);
+    if (!_expanded) widget.onClosed?.call();
+  }
+
   void _onFocusChange(bool focused) {
     setState(() {
       _focused = focused;
@@ -96,7 +105,7 @@ class _KioskControlsState extends State<KioskControls> {
                   autofocus: false,
                   focusNode: _menuFocus,
                   onFocusChange: _onFocusChange,
-                  onPressed: () => setState(() => _expanded = !_expanded),
+                  onPressed: _toggleExpanded,
                 ),
                 if (_expanded) ...[
                   if (widget.onTogglePin != null)

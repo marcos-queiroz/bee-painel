@@ -63,6 +63,10 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   // controle remoto na Android TV). Cada incremento dispara o listener.
   final ValueNotifier<int> _openControls = ValueNotifier<int>(0);
 
+  // Foco do WebView: precisa receber as setas do D-pad para a pagina tratar a
+  // navegacao (em TV/controle remoto).
+  final FocusNode _webFocus = FocusNode(debugLabel: 'webview');
+
   @override
   void initState() {
     super.initState();
@@ -104,6 +108,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     _loadWatchdog?.cancel();
     _connSub?.cancel();
     _openControls.dispose();
+    _webFocus.dispose();
     _kioskMode?.exit();
     super.dispose();
   }
@@ -187,6 +192,31 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  // Teclas do WebView: por padrao o Flutter "engole" as setas (focus traversal)
+  // e elas nunca chegam a pagina (flutter/flutter#102505). Aqui pedimos para o
+  // Flutter parar de processa-las, deixando o WebView (com foco nativo) tratar
+  // a navegacao por D-pad. So vale enquanto o WebView esta focado.
+  static final Set<LogicalKeyboardKey> _webNavKeys = {
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowDown,
+    LogicalKeyboardKey.select,
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.gameButtonA,
+  };
+
+  KeyEventResult _handleWebViewKey(FocusNode node, KeyEvent event) {
+    if (_webNavKeys.contains(event.logicalKey)) {
+      return KeyEventResult.skipRemainingHandlers;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _focusWebView() {
+    if (mounted) _webFocus.requestFocus();
   }
 
   Future<bool> _passPin() async {
@@ -344,6 +374,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           });
         }
         _clearLoading();
+        // Devolve o foco ao WebView para o D-pad navegar dentro da pagina.
+        _focusWebView();
       },
       onReceivedError: (controller, request, error) {
         if (request.isForMainFrame != true) return;
@@ -395,10 +427,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         if (!didPop) _openControls.value++;
       },
       child: Focus(
-        // Na TV, NAO roubamos o foco: o WebView precisa do foco nativo para
-        // receber as setas do D-pad e a pagina tratar a navegacao. No desktop
-        // mantemos o foco para os atalhos de teclado (MENU / Ctrl+Shift+Q).
-        autofocus: !isTv,
+        // Atalhos de teclado/controle (MENU / Ctrl+Shift+Q). NAO recebe o foco
+        // inicial para nao roubar do WebView, que precisa do foco nativo p/ o
+        // D-pad. Eventos sobem ate aqui vindos do WebView/controles.
         onKeyEvent: _handleKey,
         child: Scaffold(
         backgroundColor: Colors.black,
@@ -406,7 +437,14 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           padding: overscan,
           child: Stack(
           children: [
-            Positioned.fill(child: webView),
+            Positioned.fill(
+              child: Focus(
+                focusNode: _webFocus,
+                autofocus: true,
+                onKeyEvent: _handleWebViewKey,
+                child: webView,
+              ),
+            ),
             if (_loading && !_error)
               const Positioned.fill(
                 child: ColoredBox(
@@ -441,6 +479,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
               onTogglePin: widget.isDemo ? null : _togglePin,
               isPinned: isPinned,
               openSignal: _openControls,
+              onClosed: _focusWebView,
             ),
           ],
           ),
