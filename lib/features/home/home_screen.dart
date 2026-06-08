@@ -116,8 +116,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final config = ref.watch(kioskConfigProvider);
     final isTv = ref.watch(isAndroidTvProvider);
 
-    // Overscan: TVs cortam as bordas; aumenta a margem lateral na TV.
-    final hPad = isTv ? MediaQuery.sizeOf(context).width * 0.06 : 32.0;
+    // Overscan: TVs cortam as bordas; aumenta as margens na TV.
+    final size = MediaQuery.sizeOf(context);
+    final hPad = isTv ? size.width * 0.06 : 32.0;
+    final vPad = isTv ? size.height * 0.05 : 32.0;
 
     return Scaffold(
       body: SafeArea(
@@ -125,7 +127,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 32),
+              padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
               child: FocusTraversalGroup(
                 child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

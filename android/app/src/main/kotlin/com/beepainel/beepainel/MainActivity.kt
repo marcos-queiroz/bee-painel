@@ -2,6 +2,7 @@ package com.beepainel.beepainel
 
 import android.app.UiModeManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -27,7 +28,13 @@ class MainActivity : FlutterActivity() {
             return true
         }
         val pm = packageManager
-        return pm.hasSystemFeature("android.software.leanback") ||
+        if (pm.hasSystemFeature("android.software.leanback") ||
             pm.hasSystemFeature("android.hardware.type.television")
+        ) {
+            return true
+        }
+        // Muitos TV boxes Android genericos nao se declaram como TV nem leanback,
+        // mas tambem nao tem tela sensivel ao toque -> tratamos como TV.
+        return !pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
     }
 }
