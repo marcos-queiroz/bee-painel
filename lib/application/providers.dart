@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/constants.dart';
 import '../core/pin_utils.dart';
 import '../data/models/kiosk_config.dart';
+import '../data/models/recent_url.dart';
 import '../data/repositories/kiosk_settings_repository.dart';
 import '../data/sources/prefs_source.dart';
 import '../services/kiosk/kiosk_mode_service.dart';
@@ -37,7 +39,21 @@ class KioskConfigNotifier extends Notifier<KioskConfig> {
   KioskSettingsRepository get _repo => ref.read(kioskSettingsRepositoryProvider);
 
   @override
-  KioskConfig build() => _repo.load();
+  KioskConfig build() => _withSeededRecent(_repo.load());
+
+  // TODO(homolog): remover após os testes na TV.
+  /// Garante que a URL de homologação apareça como a recente mais recente,
+  /// mesmo em instalações novas (ex.: a Smart TV onde não há teclado/cursor
+  /// para digitar). Apenas em memória — não persiste até o usuário abri-la.
+  KioskConfig _withSeededRecent(KioskConfig config) {
+    const seed = AppConstants.seedRecentUrl;
+    final others = config.recents.where((r) => r.url != seed).toList();
+    final seeded = <RecentUrl>[
+      RecentUrl(url: seed, lastOpened: DateTime.now()),
+      ...others,
+    ].take(AppConstants.maxRecents).toList();
+    return config.copyWith(recents: seeded);
+  }
 
   Future<void> recordOpened(String url) async {
     state = await _repo.addRecent(state, url);

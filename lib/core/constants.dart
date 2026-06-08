@@ -23,6 +23,11 @@ class AppConstants {
   /// Máximo de URLs recentes guardadas.
   static const int maxRecents = 8;
 
+  // TODO(homolog): remover após os testes na TV.
+  /// URL de homologação pré-carregada na lista de recentes (temporário).
+  static const String seedRecentUrl =
+      'https://homolog.asasolucoes.app.br/paineis';
+
   /// Backoff de retry (em segundos) ao falhar o carregamento.
   static const List<int> retryBackoffSeconds = [2, 5, 10, 15];
 }
