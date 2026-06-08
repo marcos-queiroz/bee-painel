@@ -10,6 +10,7 @@ class KioskControls extends StatefulWidget {
     required this.onQuit,
     this.onTogglePin,
     this.isPinned = false,
+    this.openSignal,
   });
 
   final VoidCallback onSettings;
@@ -22,6 +23,11 @@ class KioskControls extends StatefulWidget {
   /// Indica se a URL atual está fixada (controla o ícone exibido).
   final bool isPinned;
 
+  /// Quando notifica, expande o controle e move o foco para ele. Usado pela
+  /// tecla VOLTAR do controle remoto (Android TV), já que o WebView captura o
+  /// D-pad e impede alcançar o menu pelo foco normal.
+  final Listenable? openSignal;
+
   @override
   State<KioskControls> createState() => _KioskControlsState();
 }
@@ -29,6 +35,35 @@ class KioskControls extends StatefulWidget {
 class _KioskControlsState extends State<KioskControls> {
   bool _expanded = false;
   bool _focused = false;
+  final FocusNode _menuFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.openSignal?.addListener(_handleOpenSignal);
+  }
+
+  @override
+  void didUpdateWidget(covariant KioskControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.openSignal != widget.openSignal) {
+      oldWidget.openSignal?.removeListener(_handleOpenSignal);
+      widget.openSignal?.addListener(_handleOpenSignal);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.openSignal?.removeListener(_handleOpenSignal);
+    _menuFocus.dispose();
+    super.dispose();
+  }
+
+  void _handleOpenSignal() {
+    if (!mounted) return;
+    setState(() => _expanded = true);
+    _menuFocus.requestFocus();
+  }
 
   void _onFocusChange(bool focused) {
     setState(() {
@@ -59,6 +94,7 @@ class _KioskControlsState extends State<KioskControls> {
                   icon: _expanded ? Icons.chevron_left : Icons.menu_rounded,
                   tooltip: _expanded ? 'Recolher' : 'Opções',
                   autofocus: false,
+                  focusNode: _menuFocus,
                   onFocusChange: _onFocusChange,
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
@@ -105,6 +141,7 @@ class _ControlButton extends StatefulWidget {
     required this.onPressed,
     this.autofocus = false,
     this.onFocusChange,
+    this.focusNode,
   });
 
   final IconData icon;
@@ -113,13 +150,18 @@ class _ControlButton extends StatefulWidget {
   final bool autofocus;
   final ValueChanged<bool>? onFocusChange;
 
+  /// FocusNode externo opcional (permite o pai focar este botão por programa).
+  final FocusNode? focusNode;
+
   @override
   State<_ControlButton> createState() => _ControlButtonState();
 }
 
 class _ControlButtonState extends State<_ControlButton> {
-  late final FocusNode _node = FocusNode();
+  FocusNode? _ownNode;
   bool _focused = false;
+
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
 
   @override
   void initState() {
@@ -136,7 +178,7 @@ class _ControlButtonState extends State<_ControlButton> {
   @override
   void dispose() {
     _node.removeListener(_onFocus);
-    _node.dispose();
+    _ownNode?.dispose();
     super.dispose();
   }
 

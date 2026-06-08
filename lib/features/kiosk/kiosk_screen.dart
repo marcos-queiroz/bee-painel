@@ -36,6 +36,12 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   String? _initialOrigin;
   String? _currentUrl;
 
+  // O trava-origem so passa a valer DEPOIS do primeiro carregamento concluir.
+  // Assim, atalhos/URLs que redirecionam (ex.: 302 do servidor) chegam ao
+  // destino final sem serem bloqueados, e a origem travada e re-baseada para
+  // a pagina onde o load efetivamente caiu.
+  bool _initialLoadSettled = false;
+
   // Widget do WebView memoizado: criado UMA vez para evitar que rebuilds
   // (setState de loading/erro/conectividade) recriem a plataforma e recarreguem
   // a página — o reload fazia o painel re-anunciar a senha (causando eco).
@@ -52,6 +58,10 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   // Gesto de saída: 5 toques no canto superior esquerdo em 3s.
   final Queue<DateTime> _cornerTaps = Queue<DateTime>();
+
+  // Sinaliza a abertura do menu de controles (acionado pela tecla VOLTAR do
+  // controle remoto na Android TV). Cada incremento dispara o listener.
+  final ValueNotifier<int> _openControls = ValueNotifier<int>(0);
 
   @override
   void initState() {
@@ -93,6 +103,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     _retryTimer?.cancel();
     _loadWatchdog?.cancel();
     _connSub?.cancel();
+    _openControls.dispose();
     _kioskMode?.exit();
     super.dispose();
   }
@@ -279,10 +290,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     }
 
     if (config.lockToInitialOrigin &&
+        _initialLoadSettled &&
         _initialOrigin != null &&
         (action.isForMainFrame)) {
       if (scheme == 'http' || scheme == 'https') {
-        if (!UrlUtils.sameOrigin(target, widget.url)) {
+        if (!UrlUtils.sameOrigin(target, _initialOrigin!)) {
           return NavigationActionPolicy.CANCEL;
         }
       }
@@ -320,7 +332,13 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           setState(() {
             _error = false;
             _retryAttempt = 0;
-            if (url != null) _currentUrl = url.toString();
+            if (url != null) {
+              _currentUrl = url.toString();
+              // Re-baseia a origem travada para onde o load caiu (apos seguir
+              // eventuais redirects do atalho) e ativa o trava-origem.
+              _initialOrigin = UrlUtils.origin(url.toString()) ?? _initialOrigin;
+              _initialLoadSettled = true;
+            }
           });
         }
         _clearLoading();
@@ -358,6 +376,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
     return PopScope(
       canPop: false,
+      // Tecla VOLTAR do controle remoto: nao sai do kiosque; em vez disso abre
+      // e foca o menu de controles, dando acesso por D-pad a Opcoes/Config/etc.
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _openControls.value++;
+      },
       child: Focus(
         autofocus: true,
         onKeyEvent: _handleKey,
@@ -398,6 +421,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
               onQuit: _quitApp,
               onTogglePin: widget.isDemo ? null : _togglePin,
               isPinned: isPinned,
+              openSignal: _openControls,
             ),
           ],
         ),
