@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -26,6 +27,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Na Android TV o campo de texto "prende" o D-pad (as setas movem o cursor
+    // do texto e nunca saem do campo). Aqui as setas cima/baixo movem o FOCO
+    // para fora do campo, destravando a navegacao apos abrir/fechar o teclado.
+    _urlFocus.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        node.focusInDirection(TraversalDirection.down);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        node.focusInDirection(TraversalDirection.up);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
   }
 
   @override
@@ -98,6 +114,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final config = ref.watch(kioskConfigProvider);
+    final isTv = ref.watch(isAndroidTvProvider);
+
+    // Overscan: TVs cortam as bordas; aumenta a margem lateral na TV.
+    final hPad = isTv ? MediaQuery.sizeOf(context).width * 0.06 : 32.0;
 
     return Scaffold(
       body: SafeArea(
@@ -105,7 +125,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 32),
               child: FocusTraversalGroup(
                 child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

@@ -258,6 +258,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       domStorageEnabled: true,
       databaseEnabled: true,
       useHybridComposition: true,
+      // Da foco inicial ao conteudo web (necessario p/ D-pad na Android TV).
+      needInitialFocus: true,
     );
   }
 
@@ -370,9 +372,20 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final webView = _webView ??= _buildWebView();
 
     final config = ref.watch(kioskConfigProvider);
+    final isTv = ref.watch(isAndroidTvProvider);
     final isPinned = config.autoStart &&
         config.pinnedUrl != null &&
         config.pinnedUrl == _currentUrl;
+
+    // Margem de overscan: TVs costumam cortar as bordas. Inseta o conteudo
+    // (inclusive o WebView) para nada ficar fora da area visivel.
+    final size = MediaQuery.sizeOf(context);
+    final overscan = isTv
+        ? EdgeInsets.symmetric(
+            horizontal: size.width * 0.04,
+            vertical: size.height * 0.04,
+          )
+        : EdgeInsets.zero;
 
     return PopScope(
       canPop: false,
@@ -382,10 +395,16 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         if (!didPop) _openControls.value++;
       },
       child: Focus(
-        autofocus: true,
+        // Na TV, NAO roubamos o foco: o WebView precisa do foco nativo para
+        // receber as setas do D-pad e a pagina tratar a navegacao. No desktop
+        // mantemos o foco para os atalhos de teclado (MENU / Ctrl+Shift+Q).
+        autofocus: !isTv,
         onKeyEvent: _handleKey,
         child: Scaffold(
-        body: Stack(
+        backgroundColor: Colors.black,
+        body: Padding(
+          padding: overscan,
+          child: Stack(
           children: [
             Positioned.fill(child: webView),
             if (_loading && !_error)
@@ -424,6 +443,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
               openSignal: _openControls,
             ),
           ],
+          ),
         ),
       ),
       ),
