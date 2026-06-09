@@ -1,4 +1,4 @@
-/// Constantes globais do BeePainel.
+/// Constantes globais do ASAPainel.
 class AppConstants {
   AppConstants._();
 

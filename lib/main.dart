@@ -23,7 +23,7 @@ Future<void> main() async {
         sharedPreferencesProvider.overrideWithValue(prefs),
         isAndroidTvProvider.overrideWithValue(isAndroidTv),
       ],
-      child: const _Initializer(child: BeePainelApp()),
+      child: const _Initializer(child: ASAPainelApp()),
     ),
   );
 }

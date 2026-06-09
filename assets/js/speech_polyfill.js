@@ -1,4 +1,4 @@
-// BeePainel — Polyfill da Web Speech API (speechSynthesis) com ponte para TTS nativo.
+// ASAPainel — Polyfill da Web Speech API (speechSynthesis) com ponte para TTS nativo.
 // Injetado em AT_DOCUMENT_START. Substitui window.speechSynthesis e
 // window.SpeechSynthesisUtterance para que sistemas web que dependem de narracao
 // funcionem mesmo em WebViews (ex.: Android TV) que nao implementam a API.

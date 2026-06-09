@@ -1,6 +1,6 @@
 import 'recent_url.dart';
 
-/// Configuração persistente do BeePainel.
+/// Configuração persistente do ASAPainel.
 class KioskConfig {
   const KioskConfig({
     this.pinnedUrl,

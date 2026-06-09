@@ -1,4 +1,4 @@
-# BeePainel
+# ASAPainel
 
 Navegador em **modo kiosque** para **Android TV** e **Windows**, feito em Flutter.
 O operador informa uma URL, ela abre em tela cheia e pode ser **fixada** para
@@ -45,6 +45,6 @@ flutter analyze
 1. Na tela inicial, digite uma URL (ou use **"Abrir demo de senha"** para testar a narração).
 2. Marque **"Fixar esta URL"** para auto-abrir nas próximas execuções.
 3. Para sair/fechar: use o **controle no canto superior direito** (menu →
-   Configurações / Tela inicial / Fechar BeePainel). Alternativa oculta: **5
+   Configurações / Tela inicial / Fechar ASAPainel). Alternativa oculta: **5
    toques no canto superior esquerdo** em até 3s. A saída pode ser protegida por
    PIN (configurável em Configurações).

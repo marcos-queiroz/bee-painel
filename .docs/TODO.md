@@ -7,7 +7,7 @@ problema central da narração (RF-07).
 ---
 
 > **Status:** Fases 0–6 implementadas e build Windows validado (jun/2026).
-> App `BeePainel` (org `com.beepainel`). Executável em
+> App `ASAPainel` (org `com.beepainel`). Executável em
 > `build\windows\x64\runner\Release\beepainel.exe`.
 
 ## Fase 0 — Bootstrap do projeto

@@ -9,8 +9,8 @@ import 'features/home/home_screen.dart';
 import 'features/kiosk/kiosk_screen.dart';
 import 'features/settings/settings_screen.dart';
 
-class BeePainelApp extends ConsumerWidget {
-  const BeePainelApp({super.key});
+class ASAPainelApp extends ConsumerWidget {
+  const ASAPainelApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Tema do BeePainel — identidade "abelha" (amarelo/âmbar sobre fundo escuro),
+/// Tema do ASAPainel — identidade "abelha" (amarelo/âmbar sobre fundo escuro),
 /// otimizado para leitura de longe (10-foot UI em TV).
 class AppTheme {
   AppTheme._();

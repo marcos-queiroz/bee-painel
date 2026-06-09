@@ -120,7 +120,7 @@ Um controle translúcido fixo no **canto superior direito** (`KioskControls`),
 com opacidade reduzida quando recolhido. Ao tocar no ícone de menu, expande com:
 - **Configurações** → PIN → `/settings`
 - **Tela inicial** → PIN → `/home`
-- **Fechar BeePainel** → PIN → encerra o app (`windowManager.destroy()` no
+- **Fechar ASAPainel** → PIN → encerra o app (`windowManager.destroy()` no
   desktop; `SystemNavigator.pop()` no Android)
 
 Isso garante que o operador sempre consiga sair/fechar, mesmo quando o app abre
