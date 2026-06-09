@@ -2,7 +2,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'BeePainel';
+  static const String appName = 'ASA Painel';
 
   /// Chave do JSON de configuração em SharedPreferences.
   static const String prefsConfigKey = 'beepainel_config_v1';
@@ -23,10 +23,9 @@ class AppConstants {
   /// Máximo de URLs recentes guardadas.
   static const int maxRecents = 8;
 
-  // TODO(homolog): remover após os testes na TV.
-  /// URL de homologação pré-carregada na lista de recentes (temporário).
+  /// URL pré-carregada na lista de recentes (painel de senhas da ASA Saúde).
   static const String seedRecentUrl =
-      'https://homolog.asasolucoes.app.br/paineis';
+      'https://sistema-app.asasaude.app.br/painel/display';
 
   /// Backoff de retry (em segundos) ao falhar o carregamento.
   static const List<int> retryBackoffSeconds = [2, 5, 10, 15];

@@ -146,7 +146,7 @@ class _KioskControlsState extends State<KioskControls> {
                   ),
                   _ControlButton(
                     icon: Icons.close_rounded,
-                    tooltip: 'Fechar BeePainel',
+                    tooltip: 'Fechar ASA Painel',
                     onPressed: widget.onQuit,
                   ),
                 ],

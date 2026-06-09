@@ -19,7 +19,7 @@ class KioskModeService {
     if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) return;
     await windowManager.ensureInitialized();
     const options = WindowOptions(
-      title: 'BeePainel',
+      title: 'ASA Painel',
       titleBarStyle: TitleBarStyle.normal,
       size: Size(1280, 800),
       center: true,
