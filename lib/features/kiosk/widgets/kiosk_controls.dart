@@ -9,6 +9,7 @@ class KioskControls extends StatefulWidget {
     required this.onHome,
     required this.onQuit,
     this.onTogglePin,
+    this.onRefresh,
     this.isPinned = false,
     this.openSignal,
     this.onClosed,
@@ -20,6 +21,9 @@ class KioskControls extends StatefulWidget {
 
   /// Fixa/desafixa a URL atual. Se `null`, o botão não é exibido (ex.: demo).
   final VoidCallback? onTogglePin;
+
+  /// Recarrega a página atual. Se `null`, o botão não é exibido.
+  final VoidCallback? onRefresh;
 
   /// Indica se a URL atual está fixada (controla o ícone exibido).
   final bool isPinned;
@@ -65,8 +69,14 @@ class _KioskControlsState extends State<KioskControls> {
 
   void _handleOpenSignal() {
     if (!mounted) return;
-    setState(() => _expanded = true);
-    _menuFocus.requestFocus();
+    // A tecla VOLTAR alterna o menu: abre se estiver recolhido, fecha se aberto.
+    final willExpand = !_expanded;
+    setState(() => _expanded = willExpand);
+    if (willExpand) {
+      _menuFocus.requestFocus();
+    } else {
+      widget.onClosed?.call();
+    }
   }
 
   void _toggleExpanded() {
@@ -117,6 +127,12 @@ class _KioskControlsState extends State<KioskControls> {
                           ? 'Desafixar URL'
                           : 'Fixar esta URL',
                       onPressed: widget.onTogglePin!,
+                    ),
+                  if (widget.onRefresh != null)
+                    _ControlButton(
+                      icon: Icons.refresh_rounded,
+                      tooltip: 'Atualizar',
+                      onPressed: widget.onRefresh!,
                     ),
                   _ControlButton(
                     icon: Icons.settings,

@@ -359,6 +359,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       domStorageEnabled: true,
       databaseEnabled: true,
       useHybridComposition: true,
+      // Android: honra o atributo `width` da meta viewport (necessario para
+      // forcar o layout "desktop" na TV) e ajusta a pagina a largura da tela
+      // ao carregar, evitando rolagem/conteudo cortado.
+      useWideViewPort: true,
+      loadWithOverviewMode: true,
       // NAO deixa o WebView capturar o foco nativo: o Flutter precisa receber
       // as setas do controle para mover o cursor virtual.
       needInitialFocus: false,
@@ -367,15 +372,82 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   UnmodifiableListView<UserScript> _userScripts() {
     final config = ref.read(kioskConfigProvider);
-    if (!config.ttsBridgeEnabled || _polyfill == null || _polyfill!.isEmpty) {
-      return UnmodifiableListView<UserScript>(const []);
+    final isTv = ref.read(isAndroidTvProvider);
+    final scripts = <UserScript>[];
+
+    if (config.ttsBridgeEnabled && _polyfill != null && _polyfill!.isNotEmpty) {
+      scripts.add(
+        UserScript(
+          source: _polyfill!,
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        ),
+      );
     }
-    return UnmodifiableListView<UserScript>([
-      UserScript(
-        source: _polyfill!,
-        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-      ),
-    ]);
+
+    // Na TV, o WebView reporta um viewport CSS estreito (largura em dp), o que
+    // faz paineis responsivos caírem no layout "mobile" (empilhado) e em escala
+    // ruim. Forcamos a largura FISICA da tela (ex.: 1920 em 1080p) para que a
+    // pagina seja renderizada como um desktop Full HD: layout lado-a-lado e
+    // escala ajustada a tela (junto de useWideViewPort/loadWithOverviewMode).
+    if (isTv) {
+      final mq = MediaQuery.of(context);
+      final width = (mq.size.width * mq.devicePixelRatio).round();
+      scripts.add(
+        UserScript(
+          source: _forceViewportScript(width),
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        ),
+      );
+    }
+
+    return UnmodifiableListView<UserScript>(scripts);
+  }
+
+  /// JS injetado no document start que fixa a meta viewport em [width] CSS px e
+  /// reaplica caso a propria pagina defina/altere a sua (via MutationObserver).
+  String _forceViewportScript(int width) {
+    return '''
+(function () {
+  var W = $width;
+  var CONTENT = 'width=' + W + ', user-scalable=no';
+  function enforce() {
+    var head = document.head || document.getElementsByTagName('head')[0];
+    if (!head) return;
+    var metas = document.querySelectorAll('meta[name="viewport"]');
+    var meta;
+    if (metas.length === 0) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'viewport');
+      head.appendChild(meta);
+    } else {
+      meta = metas[0];
+      for (var i = 1; i < metas.length; i++) {
+        if (metas[i].parentNode) metas[i].parentNode.removeChild(metas[i]);
+      }
+    }
+    if (meta.getAttribute('content') !== CONTENT) {
+      meta.setAttribute('content', CONTENT);
+    }
+  }
+  enforce();
+  if (document.addEventListener) {
+    document.addEventListener('DOMContentLoaded', enforce);
+  }
+  try {
+    var mo = new MutationObserver(function () { enforce(); });
+    (function start() {
+      if (document.head) {
+        mo.observe(document.head, { childList: true, subtree: true, attributes: true });
+      } else {
+        setTimeout(start, 50);
+      }
+    })();
+  } catch (e) {
+    var n = 0;
+    var iv = setInterval(function () { enforce(); if (++n > 40) clearInterval(iv); }, 250);
+  }
+})();
+''';
   }
 
   Future<NavigationActionPolicy> _shouldOverride(
@@ -476,20 +548,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final webView = _webView ??= _buildWebView();
 
     final config = ref.watch(kioskConfigProvider);
-    final isTv = ref.watch(isAndroidTvProvider);
     final isPinned = config.autoStart &&
         config.pinnedUrl != null &&
         config.pinnedUrl == _currentUrl;
-
-    // Margem de overscan: TVs costumam cortar as bordas. Inseta o conteudo
-    // (inclusive o WebView) para nada ficar fora da area visivel.
-    final size = MediaQuery.sizeOf(context);
-    final overscan = isTv
-        ? EdgeInsets.symmetric(
-            horizontal: size.width * 0.04,
-            vertical: size.height * 0.04,
-          )
-        : EdgeInsets.zero;
 
     return PopScope(
       canPop: false,
@@ -506,9 +567,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         onKeyEvent: _handleKey,
         child: Scaffold(
         backgroundColor: Colors.black,
-        body: Padding(
-          padding: overscan,
-          child: LayoutBuilder(builder: (context, constraints) {
+        body: LayoutBuilder(builder: (context, constraints) {
             _webArea = Size(constraints.maxWidth, constraints.maxHeight);
             return Stack(
           children: [
@@ -532,8 +591,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
             // controle; em telas de toque permanece oculto).
             if (_cursorVisible && _cursorPos != null)
               Positioned(
-                left: _cursorPos!.dx,
-                top: _cursorPos!.dy,
+                left: _cursorPos!.dx - _VirtualCursor.size / 2,
+                top: _cursorPos!.dy - _VirtualCursor.size / 2,
                 child: const IgnorePointer(child: _VirtualCursor()),
               ),
             // Área invisível extra (canto superior esquerdo): 5 toques em 3s.
@@ -553,6 +612,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
               onHome: _goHome,
               onQuit: _quitApp,
               onTogglePin: widget.isDemo ? null : _togglePin,
+              onRefresh: _reloadNow,
               isPinned: isPinned,
               openSignal: _openControls,
               onClosed: _focusWebView,
@@ -562,27 +622,30 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           }),
         ),
       ),
-      ),
     );
   }
 }
 
-/// Cursor virtual (ponteiro) desenhado sobre o WebView, posicionado de forma
-/// que a "ponta" coincida com o ponto de clique. Tem contorno escuro para
-/// ficar visivel sobre qualquer fundo.
+/// Cursor virtual (bolinha) desenhado sobre o WebView, centralizado no ponto de
+/// clique. Tem contorno escuro para ficar visivel sobre qualquer fundo.
 class _VirtualCursor extends StatelessWidget {
   const _VirtualCursor();
 
+  static const double size = 22;
+
   @override
   Widget build(BuildContext context) {
-    return const Icon(
-      Icons.near_me,
-      color: Colors.white,
-      size: 30,
-      shadows: [
-        Shadow(color: Colors.black, blurRadius: 3, offset: Offset(1, 1)),
-        Shadow(color: Colors.black, blurRadius: 1, offset: Offset(-1, -1)),
-      ],
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        border: Border.all(color: Colors.black54, width: 2),
+        boxShadow: const [
+          BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1)),
+        ],
+      ),
     );
   }
 }
