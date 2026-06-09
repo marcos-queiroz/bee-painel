@@ -10,6 +10,9 @@ class AppTheme {
   static const Color ink = Color(0xFF11151C);
   static const Color surface = Color(0xFF1B2230);
 
+  /// Azul da identidade ASA Saúde (usado no preload/splash).
+  static const Color brand = Color(0xFF6CC4EC);
+
   static ThemeData get dark {
     final scheme = ColorScheme.fromSeed(
       seedColor: honey,

@@ -17,12 +17,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/providers.dart';
 import '../../core/constants.dart';
+import '../../core/theme.dart';
 import '../../core/url_utils.dart';
 import '../../services/kiosk/kiosk_mode_service.dart';
 import '../../services/webview/webview_environment.dart';
 import '../settings/pin_dialog.dart';
 import 'widgets/error_overlay.dart';
 import 'widgets/kiosk_controls.dart';
+import 'widgets/splash_loader.dart';
 
 class KioskScreen extends ConsumerStatefulWidget {
   const KioskScreen({super.key, required this.url});
@@ -60,6 +62,13 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   int _retryCountdown = 0;
   Timer? _retryTimer;
   Timer? _loadWatchdog;
+
+  // Tempo MÍNIMO de exibição do preload (splash). Mesmo que a página carregue
+  // instantaneamente, o splash fica visível por este período para que a
+  // animação (Tetris) seja vista. Não atrasa o carregamento em si.
+  static const Duration _minSplash = Duration(milliseconds: 3200);
+  DateTime _loadingStartedAt = DateTime.now();
+  Timer? _minSplashTimer;
   StreamSubscription<List<ConnectivityResult>>? _connSub;
 
   // Gesto de saída: 5 toques no canto superior esquerdo em 3s.
@@ -78,6 +87,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   Offset? _cursorPos;
   bool _cursorVisible = false;
   Size _webArea = Size.zero;
+
+  // Apos um periodo sem atividade do cursor (mover/clicar), ele e ocultado
+  // automaticamente para nao ficar poluindo a tela quando ninguem o usa.
+  Timer? _cursorIdleTimer;
+  static const Duration _cursorIdleTimeout = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -118,6 +132,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   void dispose() {
     _retryTimer?.cancel();
     _loadWatchdog?.cancel();
+    _cursorIdleTimer?.cancel();
+    _minSplashTimer?.cancel();
     _connSub?.cancel();
     _openControls.dispose();
     _rootFocus.dispose();
@@ -127,7 +143,25 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   void _clearLoading() {
     _loadWatchdog?.cancel();
-    if (mounted && _loading) setState(() => _loading = false);
+    if (!mounted || !_loading) return;
+    // Respeita o tempo mínimo de splash: se a página carregou antes, agenda o
+    // fim do preload para quando completar [_minSplash].
+    final elapsed = DateTime.now().difference(_loadingStartedAt);
+    final remaining = _minSplash - elapsed;
+    if (remaining > Duration.zero) {
+      _minSplashTimer?.cancel();
+      _minSplashTimer = Timer(remaining, () {
+        if (mounted && _loading) setState(() => _loading = false);
+      });
+      return;
+    }
+    setState(() => _loading = false);
+  }
+
+  /// Marca o início de um ciclo de loading (reinicia o relógio do splash).
+  void _markLoadingStart() {
+    _loadingStartedAt = DateTime.now();
+    _minSplashTimer?.cancel();
   }
 
   /// Garante que o overlay de loading nunca fique preso, mesmo quando os
@@ -159,6 +193,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   Future<void> _reloadNow() async {
     _retryTimer?.cancel();
+    _markLoadingStart();
     setState(() {
       _error = false;
       _loading = true;
@@ -255,6 +290,18 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         (cur.dy + dy).clamp(0.0, _webArea.height),
       );
     });
+    _restartCursorIdleTimer();
+  }
+
+  /// (Re)inicia a contagem de inatividade do cursor. Apos [_cursorIdleTimeout]
+  /// sem mover/clicar, o cursor virtual e ocultado.
+  void _restartCursorIdleTimer() {
+    _cursorIdleTimer?.cancel();
+    _cursorIdleTimer = Timer(_cursorIdleTimeout, () {
+      if (mounted && _cursorVisible) {
+        setState(() => _cursorVisible = false);
+      }
+    });
   }
 
   /// Despacha um clique sintetico no ponto do cursor, direto na pagina. Usa a
@@ -265,6 +312,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final pos = _cursorPos;
     final controller = _controller;
     if (pos == null || controller == null || _webArea.isEmpty) return;
+    _restartCursorIdleTimer();
     final fracX = (pos.dx / _webArea.width).clamp(0.0, 1.0);
     final fracY = (pos.dy / _webArea.height).clamp(0.0, 1.0);
     try {
@@ -494,6 +542,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         _startLoadWatchdog();
       },
       onLoadStart: (controller, url) {
+        _markLoadingStart();
         if (mounted) setState(() => _loading = true);
         _startLoadWatchdog();
       },
@@ -541,7 +590,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   Widget build(BuildContext context) {
     if (_polyfill == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: AppTheme.ink,
+        body: Stack(children: [SplashLoader()]),
       );
     }
 
@@ -572,13 +622,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
             return Stack(
           children: [
             Positioned.fill(child: webView),
-            if (_loading && !_error)
-              const Positioned.fill(
-                child: ColoredBox(
-                  color: Colors.black,
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              ),
+            if (_loading && !_error) const SplashLoader(),
             if (_error)
               Positioned.fill(
                 child: ErrorOverlay(
