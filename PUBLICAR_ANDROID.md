@@ -3,8 +3,65 @@
 Guia passo a passo para clonar o projeto, abrir no Android Studio, configurar as
 chaves de assinatura e gerar o build (`.aab`) que será enviado para a Google Play.
 
-> Pré-requisitos: ter o **Android Studio** instalado (com o plugin do Flutter) e o
-> **Flutter SDK** configurado no PATH. Para conferir, rode `flutter doctor`.
+> **Você já publica apps Android e já tem a sua keystore, mas trabalha com Ionic?**
+> Então só falta preparar o ambiente **Flutter** — este projeto é em Flutter, não
+> em Ionic/Capacitor. Comece pela seção **0** abaixo e, na hora da chave, é só
+> reaproveitar a sua (a criação na seção 3 é opcional).
+
+---
+
+## 0. Preparar o ambiente Flutter (quem vem do Ionic)
+
+No mundo Ionic você builda com Node + Capacitor/Cordova (`npx cap ...`). No
+Flutter, o build é feito pelo **Flutter SDK** (comando `flutter`). A boa notícia:
+o que você já usa para Android no Ionic é reaproveitado — **Android Studio,
+Android SDK, JDK e a sua keystore**. O que falta instalar é o **Flutter SDK**.
+
+**O que você já deve ter (do Ionic):**
+- Git
+- Android Studio + Android SDK
+- JDK 17 (acompanha o Android Studio)
+- Keystore de assinatura (você já tem)
+
+**O que falta instalar — Flutter SDK (macOS):**
+
+1. Instale o Flutter SDK. A forma mais simples é com o **Homebrew**:
+
+```bash
+brew install --cask flutter
+```
+
+   Alternativa manual: baixe pelo guia oficial
+   <https://docs.flutter.dev/get-started/install/macos/mobile-android> e
+   descompacte em uma pasta, ex.: `~/development/flutter`.
+
+2. Se instalou manualmente, adicione o Flutter ao **PATH** no seu shell
+   (no Mac o padrão é o **zsh** → arquivo `~/.zshrc`):
+
+```bash
+echo 'export PATH="$HOME/development/flutter/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+   (Com o Homebrew o `flutter` já fica no PATH automaticamente.)
+
+3. Abra o **Android Studio** e instale os plugins **Flutter** e **Dart**
+   (**Settings → Plugins → Marketplace**).
+4. Aceite as licenças do Android SDK:
+
+```bash
+flutter doctor --android-licenses
+```
+
+5. Valide o ambiente:
+
+```bash
+flutter doctor
+```
+
+Para publicar no Android, estes itens precisam aparecer com **[✓]**: *Flutter*,
+*Android toolchain* e *Android Studio*. Os itens de *Xcode/iOS* só importam se um
+dia você também for publicar para iPhone — podem ser ignorados por enquanto.
 
 ---
 
@@ -38,7 +95,11 @@ flutter pub get
 
 ---
 
-## 3. Criar a chave de assinatura (keystore)
+## 3. Criar a chave de assinatura (keystore) — *opcional*
+
+> **Já tem uma keystore?** Pule esta seção e vá direto para a **seção 4**,
+> reaproveitando o seu `.jks`/`.keystore` e as senhas que você já usa nos seus
+> apps Ionic. (Use a sua chave de **upload** se você usa o Play App Signing.)
 
 A chave é o que identifica você como dono do app na loja. **Crie uma vez e
 guarde com muito cuidado** — se perder, não consegue mais atualizar o app.
@@ -46,16 +107,16 @@ guarde com muito cuidado** — se perder, não consegue mais atualizar o app.
 No terminal, rode (ajuste o caminho/senha):
 
 ```bash
-keytool -genkey -v -keystore beepainel-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias beepainel
+keytool -genkey -v -keystore ~/keys/asapainel-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias asapainel
 ```
 
 - Vai pedir uma **senha** e alguns dados (nome, organização, etc.).
-- Será gerado o arquivo **`beepainel-release.jks`**.
+- Será gerado o arquivo **`asapainel-release.jks`** (em `~/keys/`, neste exemplo).
 - Guarde esse arquivo e as senhas em local seguro (fora do Git).
 
 > O comando `keytool` vem com o Java/JDK que acompanha o Android Studio. Se não
-> for reconhecido, ele costuma estar em
-> `C:\Program Files\Android\Android Studio\jbr\bin`.
+> for reconhecido no Mac, use o caminho completo:
+> `/Applications/Android\ Studio.app/Contents/jbr/Contents/Home/bin/keytool`.
 
 ---
 
@@ -70,8 +131,11 @@ pelos seus valores e pelo caminho real do `.jks`):
 storePassword=SUA_SENHA_DO_KEYSTORE
 keyPassword=SUA_SENHA_DA_CHAVE
 keyAlias=beepainel
-storeFile=C:/caminho/para/beepainel-release.jks
+storeFile=/Users/SEU_USUARIO/keys/asapainel-release.jks
 ```
+
+> No macOS use o caminho absoluto do arquivo (ex.: `/Users/...`). Você pode
+> descobrir o caminho com `pwd` na pasta onde está o `.jks`.
 
 > **Importante:** nunca suba o `key.properties` nem o `.jks` para o Git. Confira
 > se ambos estão no `.gitignore`.
@@ -177,9 +241,10 @@ build/app/outputs/bundle/release/app-release.aab
 
 ## Checklist rápido
 
-- [ ] `flutter doctor` sem erros
+- [ ] Flutter SDK instalado e no PATH (seção 0)
+- [ ] `flutter doctor` OK em Flutter, Android toolchain e Android Studio
 - [ ] `flutter pub get` executado
-- [ ] Keystore `.jks` criado e guardado em local seguro
+- [ ] Keystore em mãos (a sua já existente) e guardada em local seguro
 - [ ] `android/key.properties` preenchido (e fora do Git)
 - [ ] `build.gradle.kts` apontando para a chave de release
 - [ ] Versão atualizada no `pubspec.yaml`
