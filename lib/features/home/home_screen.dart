@@ -19,7 +19,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   final _controller = TextEditingController();
   final _urlFocus = FocusNode();
   final _openFocus = FocusNode();
-  bool _pin = false;
   String? _error;
   double _lastBottomInset = 0;
 
@@ -78,13 +77,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final url = UrlUtils.normalize(raw);
     final notifier = ref.read(kioskConfigProvider.notifier);
     await notifier.recordOpened(url);
-    if (_pin) await notifier.pin(url);
     if (!mounted) return;
     context.go('/kiosk?url=${Uri.encodeComponent(url)}');
-  }
-
-  void _openDemo() {
-    context.go('/kiosk?url=${Uri.encodeComponent('asset://demo')}');
   }
 
   Future<void> _clearRecents() async {
@@ -133,21 +127,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
+                  Stack(
+                    alignment: Alignment.center,
                     children: [
-                      const Icon(Icons.hexagon_rounded,
-                          color: AppTheme.honey, size: 40),
-                      const SizedBox(width: 12),
-                      Text('BeePainel',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(fontWeight: FontWeight.w800)),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Configurações',
-                        onPressed: () => context.push('/settings'),
-                        icon: const Icon(Icons.settings),
+                      Center(
+                        child: Image.asset(
+                          'assets/icon/logo_dark.png',
+                          height: 56,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          tooltip: 'Configurações',
+                          onPressed: () => context.push('/settings'),
+                          icon: const Icon(Icons.settings),
+                        ),
                       ),
                     ],
                   ),
@@ -174,26 +170,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     onSubmitted: _open,
                   ),
                   const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _pin,
-                    onChanged: (v) => setState(() => _pin = v),
-                    title: const Text('Fixar esta URL'),
-                    subtitle: const Text(
-                        'O app abrirá direto nela nas próximas inicializações.'),
-                  ),
-                  const SizedBox(height: 12),
                   FilledButton.icon(
                     focusNode: _openFocus,
                     onPressed: () => _open(_controller.text),
                     icon: const Icon(Icons.play_arrow_rounded, size: 28),
                     label: const Text('Abrir'),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _openDemo,
-                    icon: const Icon(Icons.science_outlined),
-                    label: const Text('Abrir demo de senha (teste de narração)'),
                   ),
                   if (config.recents.isNotEmpty) ...[
                     const SizedBox(height: 28),
