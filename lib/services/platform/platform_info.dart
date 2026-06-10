@@ -19,4 +19,21 @@ class PlatformInfo {
       return false;
     }
   }
+
+  /// Entra em Lock Task Mode (fixacao de tela) no Android: bloqueia a tecla
+  /// HOME e a troca para apps nativos enquanto o kiosque estiver ativo.
+  static Future<void> startLockTask() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('startLockTask');
+    } catch (_) {}
+  }
+
+  /// Sai do Lock Task Mode (libera HOME e troca de apps).
+  static Future<void> stopLockTask() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('stopLockTask');
+    } catch (_) {}
+  }
 }

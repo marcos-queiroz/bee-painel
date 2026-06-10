@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../platform/platform_info.dart';
+
 /// Controla tela cheia / modo kiosque e o wakelock, por plataforma (SDD-004).
 class KioskModeService {
   bool _active = false;
@@ -41,6 +43,9 @@ class KioskModeService {
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
     } else {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      // Lock Task Mode: bloqueia HOME e troca para apps nativos. A saida do
+      // kiosque (botoes protegidos por PIN) chama exit() antes de encerrar.
+      await PlatformInfo.startLockTask();
     }
   }
 
@@ -56,6 +61,8 @@ class KioskModeService {
       await windowManager.setFullScreen(false);
       await windowManager.setTitleBarStyle(TitleBarStyle.normal);
     } else {
+      // Libera HOME / troca de apps antes de restaurar a UI do sistema.
+      await PlatformInfo.stopLockTask();
       await SystemChrome.setEnabledSystemUIMode(
         SystemUiMode.edgeToEdge,
         overlays: SystemUiOverlay.values,
