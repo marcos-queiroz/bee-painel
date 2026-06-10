@@ -93,6 +93,21 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   Timer? _cursorIdleTimer;
   static const Duration _cursorIdleTimeout = Duration(seconds: 5);
 
+  // --- Aceleracao do cursor ---
+  // Um toque isolado deve mover pouco (preciso, para acertar botoes pequenos
+  // como o de ativar audio do video). Ao SEGURAR a direcao (o D-pad emite
+  // KeyDownEvent repetidos), o passo cresce progressivamente para cobrir
+  // distancia rapidamente.
+  static const double _cursorStepBase = 12.0;
+  static const double _cursorStepMax = 70.0;
+  static const double _cursorStepAccel = 5.0;
+  // Intervalo maximo entre teclas para considerar "segurando" (mesma direcao).
+  static const Duration _cursorAccelWindow = Duration(milliseconds: 220);
+  LogicalKeyboardKey? _lastCursorKey;
+  DateTime _lastCursorMoveAt =
+      DateTime.fromMillisecondsSinceEpoch(0);
+  int _cursorStreak = 0;
+
   @override
   void initState() {
     super.initState();
@@ -229,21 +244,18 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final cursorActive = _rootFocus.hasPrimaryFocus;
 
     if (cursorActive) {
-      const step = 45.0;
-      if (key == LogicalKeyboardKey.arrowLeft) {
-        _moveCursor(-step, 0);
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowRight) {
-        _moveCursor(step, 0);
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowUp) {
-        _moveCursor(0, -step);
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowDown) {
-        _moveCursor(0, step);
+      const arrows = {
+        LogicalKeyboardKey.arrowLeft,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.arrowUp,
+        LogicalKeyboardKey.arrowDown,
+      };
+      if (arrows.contains(key)) {
+        final step = _nextCursorStep(key);
+        if (key == LogicalKeyboardKey.arrowLeft) _moveCursor(-step, 0);
+        if (key == LogicalKeyboardKey.arrowRight) _moveCursor(step, 0);
+        if (key == LogicalKeyboardKey.arrowUp) _moveCursor(0, -step);
+        if (key == LogicalKeyboardKey.arrowDown) _moveCursor(0, step);
         return KeyEventResult.handled;
       }
       if (_cursorVisible &&
@@ -277,6 +289,21 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   void _focusWebView() {
     if (mounted) _rootFocus.requestFocus();
+  }
+
+  /// Calcula o passo do cursor para a tecla [key], aplicando aceleracao quando
+  /// a mesma direcao e mantida pressionada (toques repetidos do D-pad). Toques
+  /// isolados (ou troca de direcao) reiniciam para o passo base, garantindo
+  /// precisao para acertar alvos pequenos.
+  double _nextCursorStep(LogicalKeyboardKey key) {
+    final now = DateTime.now();
+    final held = key == _lastCursorKey &&
+        now.difference(_lastCursorMoveAt) <= _cursorAccelWindow;
+    _cursorStreak = held ? _cursorStreak + 1 : 0;
+    _lastCursorKey = key;
+    _lastCursorMoveAt = now;
+    final step = _cursorStepBase + _cursorStreak * _cursorStepAccel;
+    return step.clamp(_cursorStepBase, _cursorStepMax);
   }
 
   void _moveCursor(double dx, double dy) {
