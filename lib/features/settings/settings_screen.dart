@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -101,33 +102,108 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _editPin(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
     final result = await showDialog<String?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Definir PIN de saída'),
-        content: TextField(
-          controller: controller,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            hintText: 'Deixe vazio para remover o PIN',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
+      builder: (ctx) => const _SetPinDialog(),
     );
     if (result != null) {
       await ref.read(kioskConfigProvider.notifier).setExitPin(result);
     }
+  }
+}
+
+/// Diálogo para definir/alterar o PIN de saída.
+///
+/// Na Android TV o `TextField` "prende" o D-pad (as setas movem o cursor do
+/// texto e nunca saem do campo), e ao fechar o teclado virtual o foco fica
+/// perdido. Por isso este diálogo:
+/// - mapeia setas cima/baixo para mover o FOCO para fora do campo;
+/// - ao fechar o IME, devolve o foco para o botão Salvar;
+/// - permite confirmar direto pelo botão "concluir" (done) do teclado.
+class _SetPinDialog extends StatefulWidget {
+  const _SetPinDialog();
+
+  @override
+  State<_SetPinDialog> createState() => _SetPinDialogState();
+}
+
+class _SetPinDialogState extends State<_SetPinDialog>
+    with WidgetsBindingObserver {
+  final _controller = TextEditingController();
+  final _fieldFocus = FocusNode();
+  final _saveFocus = FocusNode();
+  double _lastBottomInset = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _fieldFocus.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        node.focusInDirection(TraversalDirection.down);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        node.focusInDirection(TraversalDirection.up);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.dispose();
+    _fieldFocus.dispose();
+    _saveFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final bottom = MediaQuery.of(context).viewInsets.bottom;
+      final keyboardClosed = _lastBottomInset > 0 && bottom == 0;
+      _lastBottomInset = bottom;
+      if (keyboardClosed) {
+        _fieldFocus.unfocus();
+        _saveFocus.requestFocus();
+      }
+    });
+  }
+
+  void _save() => Navigator.pop(context, _controller.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Definir PIN de saída'),
+      content: TextField(
+        controller: _controller,
+        focusNode: _fieldFocus,
+        autofocus: true,
+        obscureText: true,
+        keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.done,
+        decoration: const InputDecoration(
+          hintText: 'Deixe vazio para remover o PIN',
+        ),
+        onSubmitted: (_) => _save(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          focusNode: _saveFocus,
+          onPressed: _save,
+          child: const Text('Salvar'),
+        ),
+      ],
+    );
   }
 }
