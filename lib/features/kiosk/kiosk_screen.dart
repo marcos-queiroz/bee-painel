@@ -244,13 +244,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final cursorActive = _rootFocus.hasPrimaryFocus;
 
     if (cursorActive) {
-      const arrows = {
-        LogicalKeyboardKey.arrowLeft,
-        LogicalKeyboardKey.arrowRight,
-        LogicalKeyboardKey.arrowUp,
-        LogicalKeyboardKey.arrowDown,
-      };
-      if (arrows.contains(key)) {
+      final isArrow = key == LogicalKeyboardKey.arrowLeft ||
+          key == LogicalKeyboardKey.arrowRight ||
+          key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown;
+      if (isArrow) {
         final step = _nextCursorStep(key);
         if (key == LogicalKeyboardKey.arrowLeft) _moveCursor(-step, 0);
         if (key == LogicalKeyboardKey.arrowRight) _moveCursor(step, 0);
