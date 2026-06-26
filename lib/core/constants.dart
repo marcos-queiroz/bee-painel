@@ -13,6 +13,9 @@ class AppConstants {
   /// Página de teste embutida (sistema de senha de exemplo).
   static const String demoPageAsset = 'assets/test/senha_demo.html';
 
+  /// URL interna que abre [demoPageAsset] no kiosque (nao e http/https).
+  static const String demoUrl = 'asset://demo';
+
   /// Nomes dos canais (handlers) da ponte JS ⇄ Flutter.
   static const String hTtsSpeak = 'tts.speak';
   static const String hTtsCancel = 'tts.cancel';

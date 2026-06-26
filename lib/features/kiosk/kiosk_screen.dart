@@ -31,7 +31,7 @@ class KioskScreen extends ConsumerStatefulWidget {
 
   final String url;
 
-  bool get isDemo => url == 'asset://demo';
+  bool get isDemo => url == AppConstants.demoUrl;
 
   @override
   ConsumerState<KioskScreen> createState() => _KioskScreenState();

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../application/providers.dart';
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../core/url_utils.dart';
 
@@ -79,6 +80,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     await notifier.recordOpened(url);
     if (!mounted) return;
     context.go('/kiosk?url=${Uri.encodeComponent(url)}');
+  }
+
+  void _openDemo() {
+    context.go('/kiosk?url=${Uri.encodeComponent(AppConstants.demoUrl)}');
   }
 
   Future<void> _clearRecents() async {
@@ -175,6 +180,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     onPressed: () => _open(_controller.text),
                     icon: const Icon(Icons.play_arrow_rounded, size: 28),
                     label: const Text('Abrir'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _openDemo,
+                    icon: const Icon(Icons.record_voice_over_outlined),
+                    label: const Text('Abrir demo de senha'),
                   ),
                   if (config.recents.isNotEmpty) ...[
                     const SizedBox(height: 28),
